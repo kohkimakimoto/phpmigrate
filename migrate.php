@@ -118,9 +118,15 @@ class Migration
 
       } elseif ($this->command == 'migrate') {
 
+        $this->runMigrate();
+
       } elseif ($this->command == 'up') {
 
+        $this->runUp();
+
       } elseif ($this->command == 'down') {
+
+        $this->runDown();
 
       } else {
         fputs(STDERR, 'Unknown command: '.$this->command."\n");
@@ -228,8 +234,23 @@ EOF;
     file_put_contents($filename, $content);
 
     MigrationLogger::log("Created ".$filename);
-
   }
+
+  protected function runMigrate()
+  {
+    throw new Exception("Sorry, this command has not implemented yet.");
+  }
+
+  protected function runUp()
+  {
+    throw new Exception("Sorry, this command has not implemented yet.");
+  }
+
+  protected function runDown()
+  {
+    throw new Exception("Sorry, this command has not implemented yet.");
+  }
+
 
   protected function getSchemaVersion()
   {
