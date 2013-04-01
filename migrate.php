@@ -179,7 +179,7 @@ class Migration
       throw new Exception("You need to pass the argument for migration name. (ex php ".basename(__FILE__)." create foo");
     }
 
-    $timestamp = mktime();
+    $timestamp = time();
     $filename = $timestamp."_".$name.".php";
     $filepath = __DIR__."/".$filename;
     $camelize_name = MigrationUtils::camelize($name);
