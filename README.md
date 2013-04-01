@@ -19,10 +19,10 @@ You need to configure to connect your MySQL database to migrate.
 
 Please open `migrate.php` downloaded. And Modiry below settings for your environment.
 
-        MigrationConfig::set('database_dsn',      'mysql:dbname=yourdatabase;host=localhost');
-        MigrationConfig::set('database_user',     'user');
-        MigrationConfig::set('database_password', 'password');
-        MigrationConfig::set('schema_version_table',  'schema_version');
+    MigrationConfig::set('database_dsn',      'mysql:dbname=yourdatabase;host=localhost');
+    MigrationConfig::set('database_user',     'user');
+    MigrationConfig::set('database_password', 'password');
+    MigrationConfig::set('schema_version_table',  'schema_version');
 
 # Usage
 
