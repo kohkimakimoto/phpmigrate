@@ -14,14 +14,11 @@ Just puts `migrate.php` file in your direcotry.
 
 # Command syntax
 
-## php migrate.php create
+* **php migrate.php create**
 
+* **php migrate.php status**
 
-## php migrate.php status
-
-
-## php migrate.php migrate
-
+* **php migrate.php migrate**
 
 # License
 
