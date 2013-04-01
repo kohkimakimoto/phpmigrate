@@ -159,6 +159,10 @@ class Migration
     MigrationLogger::log("Your migrations yet to be executed are below.");
 
     $files = $this->getValidMigrationFileList($version);
+    if (count($files) === 0) {
+      MigrationLogger::log("Already up to date.");
+    }
+
     foreach ($files as $file) {
       echo basename($file)."\n";
     }
@@ -245,7 +249,7 @@ EOF;
 
     $files = $this->getValidMigrationFileList($version);
     if (count($files) === 0) {
-      MigrationLogger::log("Already up-to-date");
+      MigrationLogger::log("Already up to date.");
     }
 
     foreach ($files as $file) {
@@ -320,8 +324,14 @@ COLLATE = utf8_bin;
 EOF;
       $stmt = $conn->prepare($sql);
       $stmt ->execute();
+    }
 
-      // Insert initial version.
+    // Insert initial record if it dosen't exist.
+    $sql = "select * from ".$table;
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    $arr = $stmt->fetchAll();
+    if (count($arr) == 0) {
       $sql = "insert into ".$table."(version) values (:version)";
       $stmt = $conn->prepare($sql);
       $stmt->execute(array(':version' => $version));
