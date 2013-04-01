@@ -1,7 +1,7 @@
 #!/usr/bin/env php
 <?php
 /**
- * PHPMIgratie
+ * PHPMigrate
  *
  * @author     Kohki Makimoto <kohki.makimoto@gmail.com>
  * @copyright  2010 - 2013 Kohki Makimoto <kohki.makimoto@gmail.com>
@@ -13,21 +13,20 @@
  */
 ////////// BEGIN OF CONFIG AREA //////////////////////////////
 
-// Create Test User:
+// Create Test User like below:
 //   > GRANT ALL PRIVILEGES ON *.* TO user@'localhost' IDENTIFIED BY 'password';
 //   > FLUSH PRIVILEGES;
 
-MigrationConfig::set('database_dsn',      'mysql:dbname=yourdatabase;host=localhost');
-MigrationConfig::set('database_user',     'user');
-MigrationConfig::set('database_password', 'password');
+MigrationConfig::set('database', 'mysql:dbname=yourdatabase;host=localhost');
+MigrationConfig::set('database', 'user');
+MigrationConfig::set('database', 'password');
 
 MigrationConfig::set('schema_version_table',  'schema_version');
 
 ////////// END OF CONFIG AREA ////////////////////////////////
 
-// Run Command.
-Migration::main();
 
+////////// BIGIN PROGRAM AREA (Do not modify!) ///////////////
 /**
  * Migration Class
  *
@@ -113,6 +112,10 @@ class Migration
 
         $this->runStatus();
 
+      } elseif ($this->command == 'create') {
+
+        $this->runCreate();
+
       } elseif ($this->command == 'migrate') {
 
       } elseif ($this->command == 'up') {
@@ -142,6 +145,78 @@ class Migration
   protected function runStatus()
   {
     $this->getSchemaVersionTable();
+  }
+
+  /**
+   * Run Create Command
+   */
+  protected function runCreate()
+  {
+    if (count($this->arguments) > 0) {
+      $name = $this->arguments[0];
+    } else {
+      throw new Exception("You need to pass the argument for migration name. (ex php ".basename(__FILE__)." create foo");
+    }
+
+    $timestamp = mktime();
+    $filename = $timestamp."_".$name.".php";
+    $filepath = __DIR__."/".$filename;
+    $camelize_name = MigrationUtils::camelize($name);
+
+    $content = <<<EOF
+<?php
+/**
+ * Migration class.
+ */
+class $camelize_name
+{
+  public function preUp()
+  {
+      // add the pre-migration code here
+  }
+
+  public function postUp()
+  {
+      // add the post-migration code here
+  }
+
+  public function preDown()
+  {
+      // add the pre-migration code here
+  }
+
+  public function postDown()
+  {
+      // add the post-migration code here
+  }
+
+  /**
+   * Return the SQL statements for the Up migration
+   *
+   * @return string The SQL string to execute for the Up migration.
+   */
+  public function getUpSQL()
+  {
+     return "";
+  }
+
+  /**
+   * Return the SQL statements for the Down migration
+   *
+   * @return string The SQL string to execute for the Down migration.
+   */
+  public function getDownSQL()
+  {
+     return "";
+  }
+
+}
+EOF;
+
+    file_put_contents($filename, $content);
+
+    MigrationLogger::log("Created ".$filename);
+
   }
 
   protected function getSchemaVersionTable()
@@ -193,10 +268,11 @@ class Migration
     echo "  -c         : List configurations.\n";
     echo "\n";
     echo "Commands:\n";
-    echo "  status     : List the migrations yet to be executed.\n";
-    echo "  migrate    : Execute the next migrations up.\n";
-    echo "  up         : Execute the next migration up.\n";
-    echo "  down       : Execute the next migration down.\n";
+    echo "  create NAME    : Create new empty migration file.\n";
+    echo "  status         : List the migrations yet to be executed.\n";
+    echo "  migrate        : Execute the next migrations up.\n";
+    echo "  up             : Execute the next migration up.\n";
+    echo "  down           : Execute the next migration down.\n";
     echo "\n";
   }
 
@@ -332,6 +408,77 @@ class MigrationUtils
     }
     return $ret;
   }
+
+  /*
+  The Following Methods are copied from symfony web application framework version 1.4. (http://symfony.com/).
+  */
+
+  /*
+  Copyright (c) 2004-2010 Fabien Potencier
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is furnished
+  to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+  */
+
+  /**
+   * Returns a camelized string from a lower case and underscored string by replaceing slash with
+   * double-colon and upper-casing each letter preceded by an underscore.
+   *
+   * @param  string $lower_case_and_underscored_word  String to camelize.
+   *
+   * @return string Camelized string.
+   */
+  public static function camelize($lower_case_and_underscored_word)
+  {
+  	$tmp = $lower_case_and_underscored_word;
+  	$tmp = self::pregtr($tmp, array('#/(.?)#e'    => "'::'.strtoupper('\\1')",
+  			'/(^|_|-)+(.)/e' => "strtoupper('\\2')"));
+
+  	return $tmp;
+  }
+
+  /**
+   * Returns an underscore-syntaxed version or the CamelCased string.
+   *
+   * @param  string $camel_cased_word  String to underscore.
+   *
+   * @return string Underscored string.
+   */
+  public static function underscore($camel_cased_word)
+  {
+  	$tmp = $camel_cased_word;
+  	$tmp = str_replace('::', '/', $tmp);
+  	$tmp = self::pregtr($tmp, array('/([A-Z]+)([A-Z][a-z])/' => '\\1_\\2',
+  			'/([a-z\d])([A-Z])/'     => '\\1_\\2'));
+
+  	return strtolower($tmp);
+  }
+
+  /**
+   * Returns subject replaced with regular expression matchs
+   *
+   * @param mixed $search        subject to search
+   * @param array $replacePairs  array of search => replace pairs
+   */
+  public static function pregtr($search, $replacePairs)
+  {
+  	return preg_replace(array_keys($replacePairs), array_values($replacePairs), $search);
+  }
 }
 
 /**
@@ -357,3 +504,6 @@ class MigrationLogger
     }
   }
 }
+
+// Run Command.
+Migration::main();
