@@ -21,7 +21,7 @@ MigrationConfig::set('database_dsn',      'mysql:dbname=yourdatabase;host=localh
 MigrationConfig::set('database_user',     'user');
 MigrationConfig::set('database_password', 'password');
 
-// MigrationConfig::set('migrations_table',  'migrations');
+MigrationConfig::set('schema_version_table',  'schema_version');
 
 ////////// END OF CONFIG AREA ////////////////////////////////
 
@@ -136,6 +136,28 @@ class Migration
     }
   }
 
+  /**
+   * Run Status Command
+   */
+  protected function runStatus()
+  {
+    $this->getSchemaVersionTable();
+  }
+
+  protected function getSchemaVersionTable()
+  {
+    $table = MigrationConfig::get('schema_version_table', 'schema_version');
+    $sql = 'show tables like '.$table;
+
+    $conn = $this->getConnection();
+    $stmt = $conn->prepare($sql);
+
+    if (!$stmt->execute()) {
+      MigrationLogger::log("Table [".$table."] is not found. This schema hasn't been managed yet by PHPMigrate.");
+    }
+  }
+
+
 
   protected function getConnection()
   {
@@ -157,7 +179,7 @@ class Migration
   protected function usage()
   {
     echo "\n";
-    echo "PHPMigration is a minimum migration tool. version ".Migration::VERSION.".\n";
+    echo "PHPMigrate is a minimum migration tool. version ".Migration::VERSION.".\n";
     echo "\n";
     echo "Copyright (c) Kohki Makimoto <kohki.makimoto@gmail.com>\n";
     echo "Apache License 2.0\n";
@@ -328,10 +350,10 @@ class MigrationLogger
 
     if ($level == 'debug') {
       if (MigrationConfig::get('debug')) {
-        echo "[".date_create()->format('c')."] DEBUG ".$msg."\n";
+        echo "DEBUG ".$msg."\n";
       }
     } else {
-      echo "[".date_create()->format('c')."] INFO ".$msg."\n";
+      echo "INFO ".$msg."\n";
     }
   }
 }
