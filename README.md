@@ -70,6 +70,22 @@ Execute the next migrations up.
 
         php migrate.php migrate
 
+## up
+
+Execute the next migration up.
+
+* Exsamples
+
+        php migrate.php up
+
+## down
+
+Execute the next migration down.
+
+* Exsamples
+
+        php migrate.php down
+
 # License
 
   Apache License 2.0

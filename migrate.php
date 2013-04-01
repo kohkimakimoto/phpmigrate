@@ -35,7 +35,7 @@ MigrationConfig::set('schema_version_table',  'schema_version');
  */
 class Migration
 {
-  const VERSION = '0.9.0';
+  const VERSION = '0.9.1';
 
   protected $options;
   protected $arguments;
@@ -156,13 +156,13 @@ class Migration
       MigrationLogger::log("Current schema version is ".$version);
     }
 
-    MigrationLogger::log("Your migrations yet to be executed are below.");
-
-    $files = $this->getValidMigrationFileList($version);
+    $files = $this->getValidMigrationUpFileList($version);
     if (count($files) === 0) {
       MigrationLogger::log("Already up to date.");
+      return;
     }
 
+    MigrationLogger::log("Your migrations yet to be executed are below.");
     foreach ($files as $file) {
       echo basename($file)."\n";
     }
@@ -239,6 +239,9 @@ EOF;
     MigrationLogger::log("Created ".$filename);
   }
 
+  /**
+   * Run Migrate Command
+   */
   protected function runMigrate()
   {
     $version = $this->getSchemaVersion();
@@ -247,9 +250,10 @@ EOF;
       MigrationLogger::log("Current schema version is ".$version);
     }
 
-    $files = $this->getValidMigrationFileList($version);
+    $files = $this->getValidMigrationUpFileList($version);
     if (count($files) === 0) {
       MigrationLogger::log("Already up to date.");
+      return;
     }
 
     foreach ($files as $file) {
@@ -257,14 +261,50 @@ EOF;
     }
   }
 
+  /**
+   * Run Up Command
+   */
   protected function runUp()
   {
-    throw new Exception("Sorry, this command has not implemented yet.");
+    $version = $this->getSchemaVersion();
+
+    if ($version !== null) {
+      MigrationLogger::log("Current schema version is ".$version);
+    }
+
+    $files = $this->getValidMigrationUpFileList($version);
+    if (count($files) === 0) {
+      MigrationLogger::log("Already up to date.");
+      return;
+    }
+
+    $this->migrateUp($files[0]);
   }
 
+  /**
+   * Run Down Command
+   */
   protected function runDown()
   {
-    throw new Exception("Sorry, this command has not implemented yet.");
+    $version = $this->getSchemaVersion();
+
+    if ($version !== null) {
+      MigrationLogger::log("Current schema version is ".$version);
+    }
+
+    $files = $this->getValidMigrationDownFileList($version);
+    if (count($files) === 0) {
+      MigrationLogger::log("Not found older migration files than current schema version.");
+      return;
+    }
+
+    $prev_version = null;
+    if (isset($files[1])) {
+      preg_match("/(\d+)_(.*)\.php$/", basename($files[1]), $matches);
+      $prev_version    = $matches[1];
+    }
+
+    $this->migrateDown($files[0], $prev_version);
   }
 
 
@@ -275,7 +315,7 @@ EOF;
     require $file;
 
     preg_match("/(\d+)_(.*)\.php$/", basename($file), $matches);
-    $version    = MigrationUtils::camelize($matches[1]);
+    $version    = $matches[1];
     $class_name = MigrationUtils::camelize($matches[2]);
 
     $migrationInstance = new $class_name();
@@ -297,6 +337,42 @@ EOF;
     }
 
     $this->updateSchemaVersion($version);
+  }
+
+  protected function migrateDown($file, $prev_version)
+  {
+    if ($prev_version === null) {
+      MigrationLogger::log("Proccesing migrate down to version first by ".basename($file)."");
+    } else {
+      MigrationLogger::log("Proccesing migrate down to version $prev_version by ".basename($file)."");
+    }
+
+
+    require $file;
+
+    preg_match("/(\d+)_(.*)\.php$/", basename($file), $matches);
+    $version    = $matches[1];
+    $class_name = MigrationUtils::camelize($matches[2]);
+
+    $migrationInstance = new $class_name();
+
+    if (method_exists($migrationInstance, 'preDown')) {
+      $migrationInstance->preDown();
+    }
+
+    $sql = $migrationInstance->getDownSQL();
+    if (!empty($sql)) {
+      $conn = $this->getConnection();
+      if ($conn->exec($sql) === false) {
+        throw new Exception("SQL Error");
+      }
+    }
+
+    if (method_exists($migrationInstance, 'postDown')) {
+      $migrationInstance->postDown();
+    }
+
+    $this->updateSchemaVersion($prev_version);
   }
 
   protected function updateSchemaVersion($version)
@@ -416,7 +492,7 @@ EOF;
     echo "\n";
   }
 
-  protected function getValidMigrationFileList($version)
+  protected function getValidMigrationUpFileList($version)
   {
     $valid_files = array();
 
@@ -426,6 +502,24 @@ EOF;
       $timestamp = $matches[0];
 
       if ($timestamp > $version) {
+        $valid_files[] = $file;
+      }
+    }
+
+    return $valid_files;
+  }
+
+  protected function getValidMigrationDownFileList($version)
+  {
+    $valid_files = array();
+
+    $files = $this->getMigrationFileList();
+    rsort($files);
+    foreach ($files as $file) {
+      preg_match ("/^\d+/", basename($file), $matches);
+      $timestamp = $matches[0];
+
+      if ($timestamp <= $version) {
         $valid_files[] = $file;
       }
     }
