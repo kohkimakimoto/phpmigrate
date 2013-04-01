@@ -35,7 +35,7 @@ MigrationConfig::set('schema_version_table',  'schema_version');
  */
 class Migration
 {
-  const VERSION = '0.1.0';
+  const VERSION = '0.9.0';
 
   protected $options;
   protected $arguments;

@@ -36,7 +36,7 @@ Switch the debug mode to output log on the debug level.
 
 ## -h
 
-List available command line options (this page).
+List available command line options.
 
 ## -c
 
