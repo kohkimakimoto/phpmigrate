@@ -17,9 +17,9 @@
 //   > GRANT ALL PRIVILEGES ON *.* TO user@'localhost' IDENTIFIED BY 'password';
 //   > FLUSH PRIVILEGES;
 
-MigrationConfig::set('database', 'mysql:dbname=yourdatabase;host=localhost');
-MigrationConfig::set('database', 'user');
-MigrationConfig::set('database', 'password');
+MigrationConfig::set('database_dsn',      'mysql:dbname=yourdatabase;host=localhost');
+MigrationConfig::set('database_user',     'user');
+MigrationConfig::set('database_password', 'password');
 
 MigrationConfig::set('schema_version_table',  'schema_version');
 
@@ -144,7 +144,19 @@ class Migration
    */
   protected function runStatus()
   {
-    $this->getSchemaVersionTable();
+    $version = $this->getSchemaVersion();
+
+    if ($version !== null) {
+      MigrationLogger::log("Current schema version is ".$version);
+    }
+
+    MigrationLogger::log("Your migrations yet to be executed are below.");
+
+    $files = $this->getValidMigrationFileList($version);
+    foreach ($files as $file) {
+      echo "> ".basename($file)."\n";
+    }
+
   }
 
   /**
@@ -219,16 +231,29 @@ EOF;
 
   }
 
-  protected function getSchemaVersionTable()
+  protected function getSchemaVersion()
   {
-    $table = MigrationConfig::get('schema_version_table', 'schema_version');
-    $sql = 'show tables like '.$table;
-
     $conn = $this->getConnection();
+
+    $table = MigrationConfig::get('schema_version_table', 'schema_version');
+    $sql = "show tables like '".$table."'";
     $stmt = $conn->prepare($sql);
 
+    // Check to exist table.
     if (!$stmt->execute()) {
       MigrationLogger::log("Table [".$table."] is not found. This schema hasn't been managed yet by PHPMigrate.");
+      return null;
+    }
+
+    $sql = "select version from ".$table."";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+
+    $arr = $stmt->fetchAll();
+    if (count($arr) > 0) {
+      return $arr[0]['version'];
+    } else {
+      return null;
     }
   }
 
@@ -276,10 +301,35 @@ EOF;
     echo "\n";
   }
 
+  protected function getValidMigrationFileList($version)
+  {
+    $valid_files = array();
+
+    $files = $this->getMigrationFileList();
+    foreach ($files as $file) {
+      preg_match ("/^\d+/", basename($file), $matches);
+      $timestamp = $matches[0];
+
+      if ($timestamp > $version) {
+        $valid_files[] = $file;
+      }
+    }
+
+    return $valid_files;
+  }
+
+  protected function getMigrationFileList()
+  {
+    $files = glob(__DIR__.'/[0123456789][0123456789][0123456789][0123456789][0123456789][0123456789][0123456789][0123456789][0123456789][0123456789]_*.php');
+    sort($files);
+
+    return $files;
+  }
+
   /**
    * List config
    */
-  public function listConfig()
+  protected function listConfig()
   {
     $largestLength = MigrationUtils::arrayKeyLargestLength(MigrationConfig::getAllOnFlatArray());
     echo "\n";
