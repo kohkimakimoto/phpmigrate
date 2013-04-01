@@ -20,7 +20,7 @@ Just puts `migrate.php` file in the direcotry you like.
 
 You need to configure to connect your MySQL database to migrate.
 
-Please open `migrate.php` downloaded. And Modify below settings for your environment.
+Please open `migrate.php` downloaded. And modify below settings for your environment.
 
     MigrationConfig::set('database_dsn',         'mysql:dbname=yourdatabase;host=localhost');
     MigrationConfig::set('database_user',        'user');
