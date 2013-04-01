@@ -484,7 +484,7 @@ EOF;
     echo "  -c         : List configurations.\n";
     echo "\n";
     echo "Commands:\n";
-    echo "  create NAME    : Create new empty migration file.\n";
+    echo "  create NAME    : Create new skeleton migration file.\n";
     echo "  status         : List the migrations yet to be executed.\n";
     echo "  migrate        : Execute the next migrations up.\n";
     echo "  up             : Execute the next migration up.\n";
