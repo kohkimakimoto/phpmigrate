@@ -28,7 +28,7 @@ Please open `migrate.php` downloaded. And modify below settings for your environ
     MigrationConfig::set('schema_version_table', 'schema_version');
 
 
-And Create Migration Class File. Run the following command
+And create migration class file. Run the following command
 
     php migrate.php create create_sample_table
 
@@ -36,7 +36,7 @@ You would get the following messages and the skeleton migration file.
 
     INFO Created 1362341603_create_sample_table.php
 
-Open the `xxxxxxxxxx_create_sample_table.php`. And Modify `getUpSQL` method like this.
+Open the `xxxxxxxxxx_create_sample_table.php`. And modify `getUpSQL` method like this.
 
       /**
        * Return the SQL statements for the Up migration
