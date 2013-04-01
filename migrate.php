@@ -160,9 +160,8 @@ class Migration
 
     $files = $this->getValidMigrationFileList($version);
     foreach ($files as $file) {
-      echo "> ".basename($file)."\n";
+      echo basename($file)."\n";
     }
-
   }
 
   /**
@@ -238,7 +237,20 @@ EOF;
 
   protected function runMigrate()
   {
-    throw new Exception("Sorry, this command has not implemented yet.");
+    $version = $this->getSchemaVersion();
+
+    if ($version !== null) {
+      MigrationLogger::log("Current schema version is ".$version);
+    }
+
+    $files = $this->getValidMigrationFileList($version);
+    if (count($files) === 0) {
+      MigrationLogger::log("Already up-to-date");
+    }
+
+    foreach ($files as $file) {
+      $this->migrateUp($file);
+    }
   }
 
   protected function runUp()
@@ -252,6 +264,75 @@ EOF;
   }
 
 
+  protected function migrateUp($file)
+  {
+    MigrationLogger::log("Proccesing migrate up by ".basename($file)."");
+
+    require $file;
+
+    preg_match("/(\d+)_(.*)\.php$/", basename($file), $matches);
+    $version    = MigrationUtils::camelize($matches[1]);
+    $class_name = MigrationUtils::camelize($matches[2]);
+
+    $migrationInstance = new $class_name();
+
+    if (method_exists($migrationInstance, 'preUp')) {
+      $migrationInstance->preUp();
+    }
+
+    $sql = $migrationInstance->getUpSQL();
+    if (!empty($sql)) {
+      $conn = $this->getConnection();
+      if ($conn->exec($sql) === false) {
+        throw new Exception("SQL Error");
+      }
+    }
+
+    if (method_exists($migrationInstance, 'postUp')) {
+      $migrationInstance->postUp();
+    }
+
+    $this->updateSchemaVersion($version);
+  }
+
+  protected function updateSchemaVersion($version)
+  {
+    $conn = $this->getConnection();
+
+    $table = MigrationConfig::get('schema_version_table', 'schema_version');
+    $sql = "show tables like '".$table."'";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+
+    $arr = $stmt->fetchAll();
+
+    // Create table if it dosen't exist.
+    if (count($arr) == 0) {
+      $sql =<<<EOF
+
+CREATE TABLE `$table` (
+  `version` INT UNSIGNED NOT NULL,
+  PRIMARY KEY (`version`) )
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8
+COLLATE = utf8_bin;
+
+EOF;
+      $stmt = $conn->prepare($sql);
+      $stmt ->execute();
+
+      // Insert initial version.
+      $sql = "insert into ".$table."(version) values (:version)";
+      $stmt = $conn->prepare($sql);
+      $stmt->execute(array(':version' => $version));
+    }
+
+    // Update version.
+    $sql = "update ".$table." set version = :version";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute(array(':version' => $version));
+  }
+
   protected function getSchemaVersion()
   {
     $conn = $this->getConnection();
@@ -259,10 +340,13 @@ EOF;
     $table = MigrationConfig::get('schema_version_table', 'schema_version');
     $sql = "show tables like '".$table."'";
     $stmt = $conn->prepare($sql);
+    $stmt->execute();
+
+    $arr = $stmt->fetchAll();
 
     // Check to exist table.
-    if (!$stmt->execute()) {
-      MigrationLogger::log("Table [".$table."] is not found. This schema hasn't been managed yet by PHPMigrate.");
+    if (count($arr) == 0) {
+      MigrationLogger::log("Table [".$table."] is not found. This schema hasn't been managed yet by PHPMigrate.", "debug");
       return null;
     }
 
