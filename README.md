@@ -10,6 +10,9 @@ PHPMigrate is a minimum database migration tool for MySQL.
 
 Just puts `migrate.php` file in the direcotry you like.
 
+    wget https://raw.github.com/kohkimakimoto/phpmigrate/master/migrate.php
+
+
 # Initial Configurateions.
 
 You need to configure to connect your MySQL database to migrate.
@@ -21,7 +24,25 @@ Please open `migrate.php` downloaded. And Modiry below settings for your environ
         MigrationConfig::set('database_password', 'password');
         MigrationConfig::set('schema_version_table',  'schema_version');
 
-# Command syntax
+# Usage
+
+    php migrate.php [-h|-d|-c] COMMAND
+
+# Options
+
+## -d
+
+Switch the debug mode to output log on the debug level.
+
+## -h
+
+List available command line options (this page).
+
+## -c
+
+List configurations.
+
+# Commands
 
 ## create
 
@@ -33,11 +54,15 @@ Create new empty migration file.
 
 ## status
 
+List the migrations yet to be executed.
+
 * Exsamples
 
         php migrate.php status
 
 ## migrate
+
+Execute the next migrations up.
 
 * Exsamples
 
