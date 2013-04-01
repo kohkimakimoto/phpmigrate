@@ -4,7 +4,6 @@
  * PHPMIgratie
  *
  * @author     Kohki Makimoto <kohki.makimoto@gmail.com>
- * @license    MIT License
  * @copyright  2010 - 2013 Kohki Makimoto <kohki.makimoto@gmail.com>
  */
 
@@ -14,15 +13,20 @@
  */
 ////////// BEGIN OF CONFIG AREA //////////////////////////////
 
-$configs['database']['dsn']      = 'mysql:dbname=yourdatabase;host=127.0.0.1';
-$configs['database']['user']     = 'your';
-$configs['database']['password'] = 'password';
+// Create Test User:
+//   > GRANT ALL PRIVILEGES ON *.* TO user@'localhost' IDENTIFIED BY 'password';
+//   > FLUSH PRIVILEGES;
 
-$configs['settings']['migrations_table']     = 'migrations';
+MigrationConfig::set('database_dsn',      'mysql:dbname=yourdatabase;host=localhost');
+MigrationConfig::set('database_user',     'user');
+MigrationConfig::set('database_password', 'password');
+
+// MigrationConfig::set('migrations_table',  'migrations');
 
 ////////// END OF CONFIG AREA ////////////////////////////////
 
-
+// Run Command.
+Migration::main();
 
 /**
  * Migration Class
@@ -37,13 +41,14 @@ class Migration
   protected $options;
   protected $arguments;
   protected $command;
+  protected $conn;
 
   /**
    * Main method.
    */
   public static function main()
   {
-    $options = getopt("hd");
+    $options = getopt("hdc");
     $argv = $_SERVER['argv'];
     $raw_arguments = $argv;
 
@@ -83,16 +88,68 @@ class Migration
       return;
     }
 
+    if (array_key_exists('d', $options)) {
+      MigrationConfig::set('debug', true);
+    }
+
+    // Show config
+    if (array_key_exists('c', $options)) {
+      $this->listConfig();
+      return;
+    }
+
     if (count($options) === 0 && $command == null) {
       $this->usage();
       return;
     }
 
-    $this->command = $command;
-    $this->options = $options;
-    $this->arguments = $arguments;
+    try {
 
+      $this->command = $command;
+      $this->options = $options;
+      $this->arguments = $arguments;
+
+      if ($this->command == 'status') {
+
+        $this->runStatus();
+
+      } elseif ($this->command == 'migrate') {
+
+      } elseif ($this->command == 'up') {
+
+      } elseif ($this->command == 'down') {
+
+      } else {
+        fputs(STDERR, 'Unknown command: '.$this->command."\n");
+        exit(1);
+      }
+
+    } catch (Exception $e) {
+
+      if (MigrationConfig::get('debug')) {
+        fputs(STDERR, $e);
+      } else {
+        fputs(STDERR, $e->getMessage()."\n");
+      }
+
+      exit(1);
+    }
   }
+
+
+  protected function getConnection()
+  {
+    if (!$this->conn) {
+      $dsn      = MigrationConfig::get('database_dsn');
+      $user     = MigrationConfig::get('database_user');
+      $password = MigrationConfig::get('database_password');
+
+      $this->conn = new PDO($dsn, $user, $password);
+    }
+
+    return $this->conn;
+  }
+
 
   /**
    * Output usage.
@@ -106,7 +163,7 @@ class Migration
     echo "Apache License 2.0\n";
     echo "\n";
     echo "Usage:\n";
-    echo "  php ".basename(__FILE__)." [-h|-d] COMMAND\n";
+    echo "  php ".basename(__FILE__)." [-h|-d|-c] COMMAND\n";
     echo "\n";
     echo "Options:\n";
     echo "  -d         : Switch the debug mode to output log on the debug level.\n";
@@ -121,8 +178,160 @@ class Migration
     echo "\n";
   }
 
+  /**
+   * List config
+   */
+  public function listConfig()
+  {
+    $largestLength = MigrationUtils::arrayKeyLargestLength(MigrationConfig::getAllOnFlatArray());
+    echo "\n";
+    echo "Configurations :\n";
+    foreach (MigrationConfig::getAllOnFlatArray() as $key => $val) {
+      if ($largestLength === strlen($key)) {
+        $sepalator = str_repeat(" ", 0);
+      } else {
+        $sepalator = str_repeat(" ", $largestLength - strlen($key));
+      }
+
+      echo "  [".$key."] ";
+      echo $sepalator;
+      if (is_callable($val)) {
+        echo "=> function()\n";
+      } else if (is_array($val)) {
+        echo "=> array()\n";
+      } else {
+        echo "=> ".$val."\n";
+      }
+    }
+    echo "\n";
+  }
 }
 
+/**
+ * Migration Connfig Class
+ *
+ * @author kohkimakimoto <kohki.makimoto@gmail.com>
+ * @version $Revision$
+ */
+class MigrationConfig
+{
+  /**
+   * Array of configuration values.
+   * @var unknown
+   */
+  protected static $config = array();
 
+  /**
+   * Get a config parameter.
+   * @param unknown $name
+   * @param string $default
+   */
+  public static function get($name, $default = null, $delimiter = '/')
+  {
+    $config = self::$config;
+    foreach (explode($delimiter, $name) as $key) {
+      $config = isset($config[$key]) ? $config[$key] : $default;
+    }
+    return $config;
+  }
 
-Migration::main();
+  /**
+   * Set a config parameter.
+   * @param unknown $name
+   * @param unknown $value
+   */
+  public static function set($name, $value)
+  {
+    self::$config[$name] = $value;
+  }
+
+  public static function delete($name)
+  {
+    unset(self::$config[$name]);
+  }
+
+  /**
+   * Get All config parameters.
+   * @return multitype:
+   */
+  public static function getAll()
+  {
+    return self::$config;
+  }
+
+  public static function getAllOnFlatArray($namespace = null, $key = null, $array = null, $delimiter = '/')
+  {
+    $ret = array();
+
+    if ($array === null) {
+      $array = self::$config;
+    }
+
+    foreach ($array as $key => $val) {
+      if (is_array($val) && $val) {
+        if ($namespace === null) {
+          $ret = array_merge($ret, self::getAllOnFlatArray($key, $key, $val, $delimiter));
+        } else {
+          $ret = array_merge($ret, self::getAllOnFlatArray($namespace.$delimiter.$key, $key, $val, $delimiter));
+        }
+      } else {
+        if ($namespace !== null) {
+          $ret[$namespace.$delimiter.$key] = $val;
+        } else {
+          $ret[$key] = $val;
+        }
+      }
+    }
+
+    return $ret;
+  }
+}
+
+/**
+ * Migration Utility Class
+ *
+ * @author kohkimakimoto <kohki.makimoto@gmail.com>
+ * @version $Revision$
+ */
+class MigrationUtils
+{
+  /**
+   * Gets largest length of the array.
+   * @param unknown $array
+   */
+  public static function arrayKeyLargestLength($array)
+  {
+    $ret = 0;
+    $keys = array_keys($array);
+    foreach ($keys as $key) {
+      if (strlen($key) > $ret) {
+        $ret = strlen($key);
+      }
+    }
+    return $ret;
+  }
+}
+
+/**
+ * Migration Logger Class
+ *
+ * @author kohkimakimoto <kohki.makimoto@gmail.com>
+ * @version $Revision$
+ */
+class MigrationLogger
+{
+  public static function log($msg, $level = 'info')
+  {
+  	if (!MigrationConfig::get('log', true)) {
+      return;
+    }
+
+    if ($level == 'debug') {
+      if (MigrationConfig::get('debug')) {
+        echo "[".date_create()->format('c')."] DEBUG ".$msg."\n";
+      }
+    } else {
+      echo "[".date_create()->format('c')."] INFO ".$msg."\n";
+    }
+  }
+}
