@@ -127,3 +127,10 @@ Execute the next migration down.
 # License
 
   Apache License 2.0
+
+# Infomation
+
+My Blog post (written in Japanese)
+
+ * http://kohkimakimoto.hatenablog.com/entry/2013/04/02/201308
+
