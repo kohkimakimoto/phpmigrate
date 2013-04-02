@@ -34,7 +34,7 @@ MigrationConfig::set('schema_version_table',  'schema_version');
  */
 class Migration
 {
-  const VERSION = '1.0.0';
+  const VERSION = '1.0.1';
 
   protected $options;
   protected $arguments;
@@ -326,9 +326,7 @@ EOF;
     $sql = $migrationInstance->getUpSQL();
     if (!empty($sql)) {
       $conn = $this->getConnection();
-      if ($conn->exec($sql) === false) {
-        throw new Exception("SQL Error");
-      }
+      $conn->exec($sql);
     }
 
     if (method_exists($migrationInstance, 'postUp')) {
@@ -362,9 +360,7 @@ EOF;
     $sql = $migrationInstance->getDownSQL();
     if (!empty($sql)) {
       $conn = $this->getConnection();
-      if ($conn->exec($sql) === false) {
-        throw new Exception("SQL Error");
-      }
+      $conn->exec($sql);
     }
 
     if (method_exists($migrationInstance, 'postDown')) {
@@ -457,6 +453,7 @@ EOF;
       $password = MigrationConfig::get('database_password');
 
       $this->conn = new PDO($dsn, $user, $password);
+      $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
 
     return $this->conn;
