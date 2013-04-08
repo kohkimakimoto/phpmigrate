@@ -16,11 +16,23 @@
 //   > GRANT ALL PRIVILEGES ON *.* TO user@'localhost' IDENTIFIED BY 'password';
 //   > FLUSH PRIVILEGES;
 
+// PDO Connection settings.
 MigrationConfig::set('database_dsn',      'mysql:dbname=yourdatabase;host=localhost');
 MigrationConfig::set('database_user',     'user');
 MigrationConfig::set('database_password', 'password');
 
-MigrationConfig::set('schema_version_table',  'schema_version');
+// mysql client command settings.
+// MigrationConfig::set('mysql_command_enable',    true);
+// MigrationConfig::set('mysql_command_cli',       "/usr/bin/mysql");
+// MigrationConfig::set('mysql_command_tmpsqldir', "/tmp");
+// MigrationConfig::set('mysql_command_host',      "localhost");
+// MigrationConfig::set('mysql_command_user',      "user");
+// MigrationConfig::set('mysql_command_password',  "password");
+// MigrationConfig::set('mysql_command_database',  "yourdatabase");
+// MigrationConfig::set('mysql_command_options',   "--default-character-set=utf8");
+
+// schema_version_table name.
+MigrationConfig::set('schema_version_table', 'schema_version');
 
 ////////// END OF CONFIG AREA ////////////////////////////////
 
@@ -40,6 +52,7 @@ class Migration
   protected $arguments;
   protected $command;
   protected $conn;
+  protected $cli_base;
 
   /**
    * Main method.
@@ -325,8 +338,15 @@ EOF;
 
     $sql = $migrationInstance->getUpSQL();
     if (!empty($sql)) {
-      $conn = $this->getConnection();
-      $conn->exec($sql);
+      if ($this->isCliExecution()) {
+        // cli
+        $this->execUsingCli($sql);
+
+      } else {
+        // pdo
+        $conn = $this->getConnection();
+        $conn->exec($sql);
+      }
     }
 
     if (method_exists($migrationInstance, 'postUp')) {
@@ -339,11 +359,10 @@ EOF;
   protected function migrateDown($file, $prev_version)
   {
     if ($prev_version === null) {
-      MigrationLogger::log("Proccesing migrate down to version first by ".basename($file)."");
-    } else {
-      MigrationLogger::log("Proccesing migrate down to version $prev_version by ".basename($file)."");
+      $prev_version = 0;
     }
 
+    MigrationLogger::log("Proccesing migrate down to version $prev_version by ".basename($file)."");
 
     require $file;
 
@@ -359,8 +378,15 @@ EOF;
 
     $sql = $migrationInstance->getDownSQL();
     if (!empty($sql)) {
-      $conn = $this->getConnection();
-      $conn->exec($sql);
+      if ($this->isCliExecution()) {
+        // cli
+        $this->execUsingCli($sql);
+
+      } else {
+        // pdo
+        $conn = $this->getConnection();
+        $conn->exec($sql);
+      }
     }
 
     if (method_exists($migrationInstance, 'postDown')) {
@@ -372,18 +398,20 @@ EOF;
 
   protected function updateSchemaVersion($version)
   {
-    $conn = $this->getConnection();
+    if (empty($version)) {
+      $version = 0;
+    }
 
-    $table = MigrationConfig::get('schema_version_table', 'schema_version');
-    $sql = "show tables like '".$table."'";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute();
+    if ($this->isCliExecution()) {
+      // cli
+      $table = MigrationConfig::get('schema_version_table', 'schema_version');
+      $sql = "show tables like '".$table."'";
 
-    $arr = $stmt->fetchAll();
+      $arr = $this->execUsingCli($sql);
 
-    // Create table if it dosen't exist.
-    if (count($arr) == 0) {
-      $sql =<<<EOF
+          // Create table if it dosen't exist.
+      if (count($arr) == 0) {
+        $sql =<<<EOF
 
 CREATE TABLE `$table` (
   `version` INT UNSIGNED NOT NULL,
@@ -393,58 +421,126 @@ DEFAULT CHARACTER SET = utf8
 COLLATE = utf8_bin;
 
 EOF;
-      $stmt = $conn->prepare($sql);
-      $stmt ->execute();
-    }
+        $this->execUsingCli($sql);
+      }
 
-    // Insert initial record if it dosen't exist.
-    $sql = "select * from ".$table;
-    $stmt = $conn->prepare($sql);
-    $stmt->execute();
-    $arr = $stmt->fetchAll();
-    if (count($arr) == 0) {
-      $sql = "insert into ".$table."(version) values (:version)";
+      // Insert initial record if it dosen't exist.
+      $sql = "select * from ".$table;
+      $arr = $this->execUsingCli($sql);
+      if (count($arr) == 0) {
+        $sql = "insert into ".$table."(version) values ($version)";
+        $this->execUsingCli($sql);
+      }
+
+      // Update version.
+      $sql = "update ".$table." set version = $version";
+      $this->execUsingCli($sql);
+
+    } else {
+      // pdo
+      $conn = $this->getConnection();
+
+      $table = MigrationConfig::get('schema_version_table', 'schema_version');
+      $sql = "show tables like '".$table."'";
+      $stmt = $conn->prepare($sql);
+      $stmt->execute();
+
+      $arr = $stmt->fetchAll();
+
+      // Create table if it dosen't exist.
+      if (count($arr) == 0) {
+        $sql =<<<EOF
+
+CREATE TABLE `$table` (
+  `version` INT UNSIGNED NOT NULL,
+  PRIMARY KEY (`version`) )
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8
+COLLATE = utf8_bin;
+
+EOF;
+        $stmt = $conn->prepare($sql);
+        $stmt ->execute();
+      }
+
+      // Insert initial record if it dosen't exist.
+      $sql = "select * from ".$table;
+      $stmt = $conn->prepare($sql);
+      $stmt->execute();
+      $arr = $stmt->fetchAll();
+      if (count($arr) == 0) {
+        $sql = "insert into ".$table."(version) values (:version)";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute(array(':version' => $version));
+      }
+
+      // Update version.
+      $sql = "update ".$table." set version = :version";
       $stmt = $conn->prepare($sql);
       $stmt->execute(array(':version' => $version));
-    }
 
-    // Update version.
-    $sql = "update ".$table." set version = :version";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute(array(':version' => $version));
+    }
   }
 
   protected function getSchemaVersion()
   {
-    $conn = $this->getConnection();
+    if ($this->isCliExecution()) {
+      // cli
+      $table = MigrationConfig::get('schema_version_table', 'schema_version');
+      $sql = "show tables like '".$table."'";
 
-    $table = MigrationConfig::get('schema_version_table', 'schema_version');
-    $sql = "show tables like '".$table."'";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute();
+      $arr = $this->execUsingCli($sql);
 
-    $arr = $stmt->fetchAll();
+      // Check to exist table.
+      if (count($arr) == 0) {
+        MigrationLogger::log("Table [".$table."] is not found. This schema hasn't been managed yet by PHPMigrate.", "debug");
+        return null;
+      }
 
-    // Check to exist table.
-    if (count($arr) == 0) {
-      MigrationLogger::log("Table [".$table."] is not found. This schema hasn't been managed yet by PHPMigrate.", "debug");
-      return null;
-    }
+      $sql = "select version from ".$table."";
+      $arr = $this->execUsingCli($sql);
+      if (count($arr) > 0) {
+        return $arr[0];
+      } else {
+        return null;
+      }
 
-    $sql = "select version from ".$table."";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute();
-
-    $arr = $stmt->fetchAll();
-    if (count($arr) > 0) {
-      return $arr[0]['version'];
     } else {
-      return null;
+      // pdo
+
+      $conn = $this->getConnection();
+
+      $table = MigrationConfig::get('schema_version_table', 'schema_version');
+      $sql = "show tables like '".$table."'";
+      $stmt = $conn->prepare($sql);
+      $stmt->execute();
+
+      $arr = $stmt->fetchAll();
+
+      // Check to exist table.
+      if (count($arr) == 0) {
+        MigrationLogger::log("Table [".$table."] is not found. This schema hasn't been managed yet by PHPMigrate.", "debug");
+        return null;
+      }
+
+      $sql = "select version from ".$table."";
+      $stmt = $conn->prepare($sql);
+      $stmt->execute();
+
+      $arr = $stmt->fetchAll();
+      if (count($arr) > 0) {
+        return $arr[0]['version'];
+      } else {
+        return null;
+      }
     }
   }
 
 
-
+  /**
+   * Get PDO connection
+   * @return PDO
+   */
   protected function getConnection()
   {
     if (!$this->conn) {
@@ -459,6 +555,93 @@ EOF;
     return $this->conn;
   }
 
+
+  /**
+   * Get mysql command base string.
+   * @return Ambigous <string, unknown>
+   */
+  protected function getCliBase()
+  {
+    if (!$this->cli_base) {
+      $this->cli_base =
+        MigrationConfig::get('mysql_command_cli', 'mysql')
+        ." -u".MigrationConfig::get('mysql_command_user')
+        ." -p".MigrationConfig::get('mysql_command_password')
+        ." -h".MigrationConfig::get('mysql_command_host')
+        ." --batch -N"
+        ." ".MigrationConfig::get('mysql_command_options')
+        ." ".MigrationConfig::get('mysql_command_database')
+        ;
+    }
+
+    return $this->cli_base;
+  }
+
+  /**
+   * Return ture, if it use mysql command to execute migration.
+   */
+  protected function isCliExecution()
+  {
+    $ret = MigrationConfig::get('mysql_command_enable', false);
+    if ($ret) {
+      if (!MigrationConfig::get('mysql_command_user')) {
+        throw new Exception("You are using mysql_command. so config [mysql_command_user] is required.");
+      }
+      if (!MigrationConfig::get('mysql_command_host')) {
+        throw new Exception("You are using mysql_command. so config [mysql_command_host] is required.");
+      }
+      if (!MigrationConfig::get('mysql_command_password')) {
+        throw new Exception("You are using mysql_command. so config [mysql_command_password] is required.");
+      }
+      if (!MigrationConfig::get('mysql_command_database')) {
+        throw new Exception("You are using mysql_command. so config [mysql_command_database] is required.");
+      }
+    }
+
+    return $ret;
+  }
+
+  protected function getTmpSqlFilePath($sql)
+  {
+    $dir = MigrationConfig::get('mysql_command_tmpdir', '/tmp');
+    $prefix = substr(base64_encode(md5($sql)), 0, 5);
+    $uniqid = uniqid();
+
+    $sqlfile = basename(__FILE__).".".$prefix.".".$uniqid.".sql";
+    $path = $dir."/".$sqlfile;
+
+    return $path;
+  }
+
+  protected function execUsingCli($sql)
+  {
+    $path = $this->getTmpSqlFilePath($sql);
+
+    MigrationLogger::log("Executing sql is the following \n".$sql, "debug");
+    MigrationLogger::log("Creating temporary sql file to [".$path."]", "debug");
+    file_put_contents($path, $sql);
+
+    $clibase = $this->getCliBase();
+
+    $cmd = $clibase." < ".$path."  2>&1";
+    MigrationLogger::log("Executing command is [".$cmd."]", "debug");
+
+    //$output = shell_exec($cmd);
+    exec($cmd, $output, $return_var);
+
+    unlink($path);
+
+    if ($return_var !== 0) {
+      // SQL Error
+      $err = '';
+      foreach ($output as $str) {
+        $err .= $str."\n";
+      }
+      throw new Exception($err);
+    }
+
+    return $output;
+  }
 
   /**
    * Output usage.
@@ -548,9 +731,7 @@ EOF;
 
       echo "  [".$key."] ";
       echo $sepalator;
-      if (is_callable($val)) {
-        echo "=> function()\n";
-      } else if (is_array($val)) {
+      if (is_array($val)) {
         echo "=> array()\n";
       } else {
         echo "=> ".$val."\n";
