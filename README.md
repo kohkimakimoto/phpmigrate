@@ -25,6 +25,23 @@ Please open `migrate.php` downloaded. And modify below settings for your environ
     MigrationConfig::set('database_password',    'password');
     MigrationConfig::set('schema_version_table', 'schema_version');
 
+or
+
+    MigrationConfig::set('mysql_command_enable',    true);
+    MigrationConfig::set('mysql_command_cli',       "/usr/bin/mysql");
+    MigrationConfig::set('mysql_command_tmpsqldir', "/tmp");
+    MigrationConfig::set('mysql_command_host',      "localhost");
+    MigrationConfig::set('mysql_command_user',      "user");
+    MigrationConfig::set('mysql_command_password',  "password");
+    MigrationConfig::set('mysql_command_database',  "yourdatabase");
+    MigrationConfig::set('mysql_command_options',   "--default-character-set=utf8");
+    MigrationConfig::set('schema_version_table', 'schema_version');
+
+Difference between settings of `database_xxx` and `mysql_command_xxx` is database connection to execute SQL.
+At default, it uses `database_xxx` settings to connect database using PDO.
+You set up that `mysql_command_enable` is **true**. It uses `mysql_command_xxx` settings to connect databse using mysql client command.
+If you use `delimeter` command on your SQL. You need to use mysql_command_xxx` settings. Because `delimeter` command is not a SQL.
+It's a mysql client command.
 
 And create migration class file. Run the following command
 
