@@ -40,7 +40,7 @@ or
 Difference between settings of `database_xxx` and `mysql_command_xxx` is database connection to execute SQL.
 At default, it uses `database_xxx` settings to connect database using PDO.
 You set up that `mysql_command_enable` is **true**. It uses `mysql_command_xxx` settings to connect databse using mysql client command.
-If you use `delimeter` command on your SQL. You need to use mysql_command_xxx` settings. Because `delimeter` command is not a SQL.
+If you use `delimeter` command in your SQL. You need to use mysql_command_xxx` settings. Because `delimeter` command is not a SQL.
 It's a mysql client command.
 
 And create migration class file. Run the following command
