@@ -187,3 +187,8 @@ My Blog post (written in Japanese)
 
  * http://kohkimakimoto.hatenablog.com/entry/2013/04/02/201308
 
+# TODO
+
+マイグレーションタスクに同じクラス名のものが複数あると、警告も出さずに最初に読み込んだものだけを複数回適用するので、ヤバい。なおすべし。
+
+
