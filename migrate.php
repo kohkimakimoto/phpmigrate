@@ -16,24 +16,52 @@
 //   > GRANT ALL PRIVILEGES ON *.* TO user@'localhost' IDENTIFIED BY 'password';
 //   > FLUSH PRIVILEGES;
 
-// PDO Connection settings.
-MigrationConfig::set('database_dsn',      'mysql:dbname=yourdatabase;host=localhost');
-MigrationConfig::set('database_user',     'user');
-MigrationConfig::set('database_password', 'password');
 
-// mysql client command settings.
-// MigrationConfig::set('mysql_command_enable',    true);
-// MigrationConfig::set('mysql_command_cli',       "/usr/bin/mysql");
-// MigrationConfig::set('mysql_command_tmpsqldir', "/tmp");
-// MigrationConfig::set('mysql_command_host',      "localhost");
-// MigrationConfig::set('mysql_command_user',      "user");
-// MigrationConfig::set('mysql_command_password',  "password");
-// MigrationConfig::set('mysql_command_database',  "yourdatabase");
-// MigrationConfig::set('mysql_command_options',   "--default-character-set=utf8");
+$database_config = array(
+  // Database settings.
+  'yourdatabase' => array(
+    // PDO Connection settings.
+    'database_dsn'      => 'mysql:dbname=yourdatabase;host=localhost',
+    'database_user'     => 'user',
+    'database_password' => 'password',
 
-// schema_version_table name.
-MigrationConfig::set('schema_version_table', 'schema_version');
+    // mysql client command settings.
+    'mysql_command_enable'    => true,
+    'mysql_command_cli'       => "/usr/bin/mysql",
+    'mysql_command_tmpsqldir' => "/tmp",
+    'mysql_command_host'      => "localhost",
+    'mysql_command_user'      => "user",
+    'mysql_command_password'  => "password",
+    'mysql_command_database'  => "yourdatabase",
+    'mysql_command_options'   => "--default-character-set=utf8",
 
+    // schema version table
+    'schema_version_table' => 'schema_version'
+  ),
+
+  /*
+  Additional database settings.
+  'yourdatabase2' => array(
+    // PDO Connection settings.
+    'database_dsn'      => 'mysql:dbname=yourdatabase2;host=localhost',
+    'database_user'     => 'user',
+    'database_password' => 'password',
+
+    // mysql client command settings.
+    'mysql_command_enable'    => true,
+    'mysql_command_cli'       => "/usr/bin/mysql",
+    'mysql_command_tmpsqldir' => "/tmp",
+    'mysql_command_host'      => "localhost",
+    'mysql_command_user'      => "user",
+    'mysql_command_password'  => "password",
+    'mysql_command_database'  => "yourdatabase2",
+    'mysql_command_options'   => "--default-character-set=utf8",
+
+    // schema version table
+    'schema_version_table' => 'schema_version'
+  ),
+  */
+);
 ////////// END OF CONFIG AREA ////////////////////////////////
 
 
@@ -46,13 +74,13 @@ MigrationConfig::set('schema_version_table', 'schema_version');
  */
 class Migration
 {
-  const VERSION = '1.0.1';
+  const VERSION = '2.0.0';
 
   protected $options;
   protected $arguments;
   protected $command;
-  protected $conn;
-  protected $cli_base;
+  protected $conns = array();
+  protected $cli_bases = array();
 
   /**
    * Main method.
@@ -80,6 +108,12 @@ class Migration
       $i++;
     }
     $command = array_shift($arguments);
+
+    // Load Configuration
+    global $database_config;
+    if ($database_config) {
+      MigrationConfig::set("databases", $database_config);
+    }
 
     // Run.
     $instance = new Migration();
@@ -116,8 +150,8 @@ class Migration
 
     try {
 
-      $this->command = $command;
-      $this->options = $options;
+      $this->command   = $command;
+      $this->options   = $options;
       $this->arguments = $arguments;
 
       if ($this->command == 'status') {
@@ -162,22 +196,27 @@ class Migration
    */
   protected function runStatus()
   {
-    $version = $this->getSchemaVersion();
+    $databases = $this->getValidDatabases($this->arguments);
+    foreach ($databases as $database) {
+      $version = $this->getSchemaVersion($database);
+      if ($version !== null) {
+        MigrationLogger::log("[".$database."] Current schema version is ".$version);
+      }
 
-    if ($version !== null) {
-      MigrationLogger::log("Current schema version is ".$version);
+      $files = $this->getValidMigrationUpFileList($version);
+      if (count($files) === 0) {
+        MigrationLogger::log("[".$database."] Already up to date.");
+        continue;
+      }
+
+      MigrationLogger::log("[".$database."] Your migrations yet to be executed are below.");
+      MigrationLogger::log("");
+      foreach ($files as $file) {
+        MigrationLogger::log(basename($file));
+      }
+      MigrationLogger::log("");
     }
 
-    $files = $this->getValidMigrationUpFileList($version);
-    if (count($files) === 0) {
-      MigrationLogger::log("Already up to date.");
-      return;
-    }
-
-    MigrationLogger::log("Your migrations yet to be executed are below.");
-    foreach ($files as $file) {
-      echo basename($file)."\n";
-    }
   }
 
   /**
@@ -191,15 +230,15 @@ class Migration
       throw new Exception("You need to pass the argument for migration name. (ex php ".basename(__FILE__)." create foo");
     }
 
-    $timestamp = time();
-    $filename = $timestamp."_".$name.".php";
+    $timestamp = new DateTime();
+    $filename = $timestamp->format('YmdHis')."_".$name.".php";
     $filepath = __DIR__."/".$filename;
     $camelize_name = MigrationUtils::camelize($name);
 
     $content = <<<EOF
 <?php
 /**
- * Migration class.
+ * Migration Task class.
  */
 class $camelize_name
 {
@@ -256,20 +295,23 @@ EOF;
    */
   protected function runMigrate()
   {
-    $version = $this->getSchemaVersion();
+    $databases = $this->getValidDatabases($this->arguments);
+    foreach ($databases as $database) {
+      $version = $this->getSchemaVersion($database);
 
-    if ($version !== null) {
-      MigrationLogger::log("Current schema version is ".$version);
-    }
+      if ($version !== null) {
+        MigrationLogger::log("[".$database."] Current schema version is ".$version);
+      }
 
-    $files = $this->getValidMigrationUpFileList($version);
-    if (count($files) === 0) {
-      MigrationLogger::log("Already up to date.");
-      return;
-    }
+      $files = $this->getValidMigrationUpFileList($version);
+      if (count($files) === 0) {
+        MigrationLogger::log("[".$database."] Already up to date.");
+        continue;
+      }
 
-    foreach ($files as $file) {
-      $this->migrateUp($file);
+      foreach ($files as $file) {
+        $this->migrateUp($file, $database);
+      }
     }
   }
 
@@ -278,19 +320,22 @@ EOF;
    */
   protected function runUp()
   {
-    $version = $this->getSchemaVersion();
+    $databases = $this->getValidDatabases($this->arguments);
+    foreach ($databases as $database) {
+      $version = $this->getSchemaVersion($database);
 
-    if ($version !== null) {
-      MigrationLogger::log("Current schema version is ".$version);
+      if ($version !== null) {
+        MigrationLogger::log("[".$database."] Current schema version is ".$version);
+      }
+
+      $files = $this->getValidMigrationUpFileList($version);
+      if (count($files) === 0) {
+        MigrationLogger::log("[".$database."] Already up to date.");
+        continue;
+      }
+
+      $this->migrateUp($files[0], $database);
     }
-
-    $files = $this->getValidMigrationUpFileList($version);
-    if (count($files) === 0) {
-      MigrationLogger::log("Already up to date.");
-      return;
-    }
-
-    $this->migrateUp($files[0]);
   }
 
   /**
@@ -298,33 +343,37 @@ EOF;
    */
   protected function runDown()
   {
-    $version = $this->getSchemaVersion();
+    $databases = $this->getValidDatabases($this->arguments);
+    foreach ($databases as $database) {
+      $version = $this->getSchemaVersion($database);
 
-    if ($version !== null) {
-      MigrationLogger::log("Current schema version is ".$version);
+      if ($version !== null) {
+        MigrationLogger::log("[".$database."] Current schema version is ".$version);
+      }
+
+      $files = $this->getValidMigrationDownFileList($version);
+      if (count($files) === 0) {
+        MigrationLogger::log("[".$database."] Not found older migration files than current schema version.");
+        continue;
+      }
+
+      $prev_version = null;
+      if (isset($files[1])) {
+        preg_match("/(\d+)_(.*)\.php$/", basename($files[1]), $matches);
+        $prev_version    = $matches[1];
+      }
+
+      $this->migrateDown($files[0], $prev_version, $database);
     }
 
-    $files = $this->getValidMigrationDownFileList($version);
-    if (count($files) === 0) {
-      MigrationLogger::log("Not found older migration files than current schema version.");
-      return;
-    }
-
-    $prev_version = null;
-    if (isset($files[1])) {
-      preg_match("/(\d+)_(.*)\.php$/", basename($files[1]), $matches);
-      $prev_version    = $matches[1];
-    }
-
-    $this->migrateDown($files[0], $prev_version);
   }
 
 
-  protected function migrateUp($file)
+  protected function migrateUp($file, $database)
   {
-    MigrationLogger::log("Proccesing migrate up by ".basename($file)."");
+    MigrationLogger::log("[".$database."] Proccesing migrate up by ".basename($file)."");
 
-    require $file;
+    require_once $file;
 
     preg_match("/(\d+)_(.*)\.php$/", basename($file), $matches);
     $version    = $matches[1];
@@ -338,13 +387,13 @@ EOF;
 
     $sql = $migrationInstance->getUpSQL();
     if (!empty($sql)) {
-      if ($this->isCliExecution()) {
+      if ($this->isCliExecution($database)) {
         // cli
-        $this->execUsingCli($sql);
+        $this->execUsingCli($sql, $database);
 
       } else {
         // pdo
-        $conn = $this->getConnection();
+        $conn = $this->getConnection($database);
         $conn->exec($sql);
       }
     }
@@ -353,18 +402,18 @@ EOF;
       $migrationInstance->postUp();
     }
 
-    $this->updateSchemaVersion($version);
+    $this->updateSchemaVersion($version, $database);
   }
 
-  protected function migrateDown($file, $prev_version)
+  protected function migrateDown($file, $prev_version, $database)
   {
     if ($prev_version === null) {
       $prev_version = 0;
     }
 
-    MigrationLogger::log("Proccesing migrate down to version $prev_version by ".basename($file)."");
+    MigrationLogger::log("[".$database."] Proccesing migrate down to version $prev_version by ".basename($file)."");
 
-    require $file;
+    require_once $file;
 
     preg_match("/(\d+)_(.*)\.php$/", basename($file), $matches);
     $version    = $matches[1];
@@ -380,11 +429,11 @@ EOF;
     if (!empty($sql)) {
       if ($this->isCliExecution()) {
         // cli
-        $this->execUsingCli($sql);
+        $this->execUsingCli($sql, $database);
 
       } else {
         // pdo
-        $conn = $this->getConnection();
+        $conn = $this->getConnection($database);
         $conn->exec($sql);
       }
     }
@@ -393,54 +442,54 @@ EOF;
       $migrationInstance->postDown();
     }
 
-    $this->updateSchemaVersion($prev_version);
+    $this->updateSchemaVersion($prev_version, $database);
   }
 
-  protected function updateSchemaVersion($version)
+  protected function updateSchemaVersion($version, $database)
   {
     if (empty($version)) {
       $version = 0;
     }
 
-    if ($this->isCliExecution()) {
+    if ($this->isCliExecution($database)) {
       // cli
-      $table = MigrationConfig::get('schema_version_table', 'schema_version');
+      $table = MigrationConfig::get('databases/'.$database.'/schema_version_table', 'schema_version');
       $sql = "show tables like '".$table."'";
 
-      $arr = $this->execUsingCli($sql);
+      $arr = $this->execUsingCli($sql, $database);
 
           // Create table if it dosen't exist.
       if (count($arr) == 0) {
         $sql =<<<EOF
 
 CREATE TABLE `$table` (
-  `version` INT UNSIGNED NOT NULL,
+  `version` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`version`) )
 ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8
 COLLATE = utf8_bin;
 
 EOF;
-        $this->execUsingCli($sql);
+        $this->execUsingCli($sql, $database);
       }
 
       // Insert initial record if it dosen't exist.
       $sql = "select * from ".$table;
-      $arr = $this->execUsingCli($sql);
+      $arr = $this->execUsingCli($sql, $database);
       if (count($arr) == 0) {
-        $sql = "insert into ".$table."(version) values ($version)";
-        $this->execUsingCli($sql);
+        $sql = "insert into ".$table."(version) values ('$version')";
+        $this->execUsingCli($sql, $database);
       }
 
       // Update version.
-      $sql = "update ".$table." set version = $version";
-      $this->execUsingCli($sql);
+      $sql = "update ".$table." set version = '$version'";
+      $this->execUsingCli($sql, $database);
 
     } else {
       // pdo
-      $conn = $this->getConnection();
+      $conn = $this->getConnection($database);
 
-      $table = MigrationConfig::get('schema_version_table', 'schema_version');
+      $table = MigrationConfig::get('databases/'.$database.'/schema_version_table', 'schema_version');
       $sql = "show tables like '".$table."'";
       $stmt = $conn->prepare($sql);
       $stmt->execute();
@@ -452,7 +501,7 @@ EOF;
         $sql =<<<EOF
 
 CREATE TABLE `$table` (
-  `version` INT UNSIGNED NOT NULL,
+  `version` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`version`) )
 ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8
@@ -478,18 +527,45 @@ EOF;
       $sql = "update ".$table." set version = :version";
       $stmt = $conn->prepare($sql);
       $stmt->execute(array(':version' => $version));
-
     }
   }
 
-  protected function getSchemaVersion()
+  public function getValidDatabases($databases)
   {
-    if ($this->isCliExecution()) {
+    $valid_databases = array();
+    if (!$databases) {
+      $valid_databases = $this->getDatabaseNames();
+    } else {
+      $this->validateDatabaseNames($databases);
+      $valid_databases = $this->arguments;
+    }
+    return $valid_databases;
+  }
+
+  protected function getDatabaseNames()
+  {
+   return array_keys(MigrationConfig::get('databases'));
+  }
+
+  protected function validateDatabaseNames($databases)
+  {
+    $definedDatabaseNames = $this->getDatabaseNames();
+    foreach ($databases as $dbname) {
+      if (array_search($dbname, $definedDatabaseNames) === false) {
+        throw new Exception("Database '".$dbname."' is not defined.");
+      }
+    }
+  }
+
+  protected function getSchemaVersion($database)
+  {
+    MigrationLogger::log("Getting schema version from '$database'", "debug");
+    if ($this->isCliExecution($database)) {
       // cli
-      $table = MigrationConfig::get('schema_version_table', 'schema_version');
+      $table = MigrationConfig::get('databases/'.$database.'/schema_version_table', 'schema_version');
       $sql = "show tables like '".$table."'";
 
-      $arr = $this->execUsingCli($sql);
+      $arr = $this->execUsingCli($sql, $database);
 
       // Check to exist table.
       if (count($arr) == 0) {
@@ -498,7 +574,7 @@ EOF;
       }
 
       $sql = "select version from ".$table."";
-      $arr = $this->execUsingCli($sql);
+      $arr = $this->execUsingCli($sql, $database);
       if (count($arr) > 0) {
         return $arr[0];
       } else {
@@ -508,9 +584,9 @@ EOF;
     } else {
       // pdo
 
-      $conn = $this->getConnection();
+      $conn = $this->getConnection($database);
 
-      $table = MigrationConfig::get('schema_version_table', 'schema_version');
+      $table = MigrationConfig::get('databases/'.$database.'/schema_version_table', 'schema_version');
       $sql = "show tables like '".$table."'";
       $stmt = $conn->prepare($sql);
       $stmt->execute();
@@ -541,18 +617,18 @@ EOF;
    * Get PDO connection
    * @return PDO
    */
-  protected function getConnection()
+  protected function getConnection($database)
   {
-    if (!$this->conn) {
-      $dsn      = MigrationConfig::get('database_dsn');
-      $user     = MigrationConfig::get('database_user');
-      $password = MigrationConfig::get('database_password');
+    if (!@$this->conns[$database]) {
+      $dsn      = MigrationConfig::get('databases/'.$database.'/database_dsn');
+      $user     = MigrationConfig::get('databases/'.$database.'/database_user');
+      $password = MigrationConfig::get('databases/'.$database.'/database_password');
 
-      $this->conn = new PDO($dsn, $user, $password);
-      $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      $this->conns[$database] = new PDO($dsn, $user, $password);
+      $this->conns[$database]->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
 
-    return $this->conn;
+    return $this->conns[$database];
   }
 
 
@@ -560,40 +636,40 @@ EOF;
    * Get mysql command base string.
    * @return Ambigous <string, unknown>
    */
-  protected function getCliBase()
+  protected function getCliBase($database)
   {
-    if (!$this->cli_base) {
-      $this->cli_base =
-        MigrationConfig::get('mysql_command_cli', 'mysql')
-        ." -u".MigrationConfig::get('mysql_command_user')
-        ." -p".MigrationConfig::get('mysql_command_password')
-        ." -h".MigrationConfig::get('mysql_command_host')
+    if (!@$this->cli_bases[$database]) {
+      $this->cli_bases[$database] =
+        MigrationConfig::get('databases/'.$database.'/mysql_command_cli', 'mysql')
+        ." -u".MigrationConfig::get('databases/'.$database.'/mysql_command_user')
+        ." -p".MigrationConfig::get('databases/'.$database.'/mysql_command_password')
+        ." -h".MigrationConfig::get('databases/'.$database.'/mysql_command_host')
         ." --batch -N"
-        ." ".MigrationConfig::get('mysql_command_options')
-        ." ".MigrationConfig::get('mysql_command_database')
+        ." ".MigrationConfig::get('databases/'.$database.'/mysql_command_options')
+        ." ".MigrationConfig::get('databases/'.$database.'/mysql_command_database')
         ;
     }
 
-    return $this->cli_base;
+    return $this->cli_bases[$database];
   }
 
   /**
    * Return ture, if it use mysql command to execute migration.
    */
-  protected function isCliExecution()
+  protected function isCliExecution($database)
   {
-    $ret = MigrationConfig::get('mysql_command_enable', false);
+    $ret = MigrationConfig::get('databases/'.$database.'/mysql_command_enable', false);
     if ($ret) {
-      if (!MigrationConfig::get('mysql_command_user')) {
+      if (!MigrationConfig::get('databases/'.$database.'/mysql_command_user')) {
         throw new Exception("You are using mysql_command. so config [mysql_command_user] is required.");
       }
-      if (!MigrationConfig::get('mysql_command_host')) {
+      if (!MigrationConfig::get('databases/'.$database.'/mysql_command_host')) {
         throw new Exception("You are using mysql_command. so config [mysql_command_host] is required.");
       }
-      if (!MigrationConfig::get('mysql_command_password')) {
+      if (!MigrationConfig::get('databases/'.$database.'/mysql_command_password')) {
         throw new Exception("You are using mysql_command. so config [mysql_command_password] is required.");
       }
-      if (!MigrationConfig::get('mysql_command_database')) {
+      if (!MigrationConfig::get('databases/'.$database.'/mysql_command_database')) {
         throw new Exception("You are using mysql_command. so config [mysql_command_database] is required.");
       }
     }
@@ -601,10 +677,10 @@ EOF;
     return $ret;
   }
 
-  protected function getTmpSqlFilePath($sql)
+  protected function getTmpSqlFilePath($sql, $database)
   {
-    $dir = MigrationConfig::get('mysql_command_tmpdir', '/tmp');
-    $prefix = substr(base64_encode(md5($sql)), 0, 5);
+    $dir = MigrationConfig::get('databases/'.$database.'/mysql_command_tmpdir', '/tmp');
+    $prefix = $database.'_'.md5($sql);
     $uniqid = uniqid();
 
     $sqlfile = basename(__FILE__).".".$prefix.".".$uniqid.".sql";
@@ -613,15 +689,15 @@ EOF;
     return $path;
   }
 
-  protected function execUsingCli($sql)
+  protected function execUsingCli($sql, $database)
   {
-    $path = $this->getTmpSqlFilePath($sql);
+    $path = $this->getTmpSqlFilePath($sql, $database);
 
     MigrationLogger::log("Executing sql is the following \n".$sql, "debug");
     MigrationLogger::log("Creating temporary sql file to [".$path."]", "debug");
     file_put_contents($path, $sql);
 
-    $clibase = $this->getCliBase();
+    $clibase = $this->getCliBase($database);
 
     $cmd = $clibase." < ".$path."  2>&1";
     MigrationLogger::log("Executing command is [".$cmd."]", "debug");
@@ -663,11 +739,11 @@ EOF;
     echo "  -c         : List configurations.\n";
     echo "\n";
     echo "Commands:\n";
-    echo "  create NAME    : Create new skeleton migration file.\n";
-    echo "  status         : List the migrations yet to be executed.\n";
-    echo "  migrate        : Execute the next migrations up.\n";
-    echo "  up             : Execute the next migration up.\n";
-    echo "  down           : Execute the next migration down.\n";
+    echo "  create NAME                   : Create new skeleton migration task file.\n";
+    echo "  status [DATABASENAME ...]     : List the migrations yet to be executed.\n";
+    echo "  migrate [DATABASENAME ...]    : Execute the next migrations up.\n";
+    echo "  up [DATABASENAME ...]         : Execute the next migration up.\n";
+    echo "  down [DATABASENAME ...]       : Execute the next migration down.\n";
     echo "\n";
   }
 
@@ -708,9 +784,14 @@ EOF;
 
   protected function getMigrationFileList()
   {
-    $files = glob(__DIR__.'/[0123456789][0123456789][0123456789][0123456789][0123456789][0123456789][0123456789][0123456789][0123456789][0123456789]_*.php');
+    $files = array();
+    $gfiles = glob('*');
+    foreach ($gfiles as $file) {
+      if (preg_match("/^\d+_.+\.php$/", $file)) {
+        $files[] = $file;
+      }
+    }
     sort($files);
-
     return $files;
   }
 
@@ -782,6 +863,15 @@ class MigrationConfig
   public static function delete($name)
   {
     unset(self::$config[$name]);
+  }
+
+  /**
+   * Load configurations from a file.
+   * @param unknown $path
+   */
+  public static function marge($arr)
+  {
+    self::$config = array_merge(self::$config, $arr);
   }
 
   /**
@@ -933,10 +1023,10 @@ class MigrationLogger
 
     if ($level == 'debug') {
       if (MigrationConfig::get('debug')) {
-        echo "DEBUG ".$msg."\n";
+        echo "DEBUG >> ".$msg."\n";
       }
     } else {
-      echo "INFO ".$msg."\n";
+      echo $msg."\n";
     }
   }
 }
