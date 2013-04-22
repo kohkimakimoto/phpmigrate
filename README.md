@@ -10,32 +10,46 @@ Uses plain SQL to change schema. And runs some PHP codes post and previous execu
 
 # Installation
 
-Just puts `migrate.php` file in the direcotry you like.
+Just puts `migrate.php` file in your direcotry.
 
     wget https://raw.github.com/kohkimakimoto/phpmigrate/master/migrate.php
 
 # Getting Started
 
-You need to configure to connect your MySQL database to migrate.
+Configure to connect your MySQL database to migrate.
 
 Please open `migrate.php` downloaded. And modify below settings for your environment.
 
-    MigrationConfig::set('database_dsn',         'mysql:dbname=yourdatabase;host=localhost');
-    MigrationConfig::set('database_user',        'user');
-    MigrationConfig::set('database_password',    'password');
-    MigrationConfig::set('schema_version_table', 'schema_version');
+    $database_config = array(
+      // Database settings.
+      'yourdatabase' => array(
+        // PDO Connection settings.
+        'database_dsn'      => 'mysql:dbname=yourdatabase;host=localhost',
+        'database_user'     => 'user',
+        'database_password' => 'password',
+
+        // schema version table
+        'schema_version_table' => 'schema_version'
+      ),
 
 or
 
-    MigrationConfig::set('mysql_command_enable',    true);
-    MigrationConfig::set('mysql_command_cli',       "/usr/bin/mysql");
-    MigrationConfig::set('mysql_command_tmpsqldir', "/tmp");
-    MigrationConfig::set('mysql_command_host',      "localhost");
-    MigrationConfig::set('mysql_command_user',      "user");
-    MigrationConfig::set('mysql_command_password',  "password");
-    MigrationConfig::set('mysql_command_database',  "yourdatabase");
-    MigrationConfig::set('mysql_command_options',   "--default-character-set=utf8");
-    MigrationConfig::set('schema_version_table', 'schema_version');
+    $database_config = array(
+      // Database settings.
+      'yourdatabase' => array(
+        // mysql client command settings.
+        'mysql_command_enable'    => true,
+        'mysql_command_cli'       => "/usr/bin/mysql",
+        'mysql_command_tmpsqldir' => "/tmp",
+        'mysql_command_host'      => "localhost",
+        'mysql_command_user'      => "user",
+        'mysql_command_password'  => "password",
+        'mysql_command_database'  => "yourdatabase",
+        'mysql_command_options'   => "--default-character-set=utf8",
+
+        // schema version table
+        'schema_version_table' => 'schema_version'
+      ),
 
 Difference between settings of `database_xxx` and `mysql_command_xxx` is database connection to execute SQL.
 At default, it uses `database_xxx` settings to connect database using PDO.
@@ -48,10 +62,11 @@ And create migration class file. Run the following command
     php migrate.php create create_sample_table
 
 You would get the following messages and the skeleton migration file.
+`20130422155835` timestamp part depeneds on your environment.
 
-    INFO Created 1362341603_create_sample_table.php
+    Created 20130422155835_create_sample_table.php
 
-Open the `xxxxxxxxxx_create_sample_table.php`. And modify `getUpSQL` method like this.
+Open the `20130422155835_create_sample_table.php`. And modify `getUpSQL` and `getDownSQL` method like below.
 
       /**
        * Return the SQL statements for the Up migration
@@ -72,14 +87,35 @@ Open the `xxxxxxxxxx_create_sample_table.php`. And modify `getUpSQL` method like
     END;
       }
 
+    /**
+     * Return the SQL statements for the Down migration
+     *
+     * @return string The SQL string to execute for the Down migration.
+     */
+    public function getDownSQL()
+    {
+        return <<<END
+
+       DROP TABLE `sample`;
+
+    END;
+    }
+
 OK. You are ready to execute migrate command. Run the following command.
 
     php migrate.php migrate
 
-You would get below messages. and table created in your mysql database.
+You would get below messages. and table be created in your mysql database.
 
-    INFO Current schema version is 0
-    INFO Proccesing migrate up by 1362341603_create_sample_table.php
+    [yourdatabase] Current schema version is 0
+    [yourdatabase] Proccesing migrate up by 20130422155835_create_sample_table.php
+
+Also you can run migration `down` command like the following.
+
+    php migrate.php down
+
+This commad drop your sample table.
+
 
 # Command Usage
 
@@ -109,7 +145,7 @@ Create new skeleton migration file.
 
         php migrate.php create foo
 
-## status
+## status [DATABASENAME ...]
 
 List the migrations yet to be executed.
 
@@ -117,7 +153,7 @@ List the migrations yet to be executed.
 
         php migrate.php status
 
-## migrate
+## migrate [DATABASENAME ...]
 
 Execute the next migrations up.
 
@@ -125,7 +161,7 @@ Execute the next migrations up.
 
         php migrate.php migrate
 
-## up
+## up [DATABASENAME ...]
 
 Execute the next migration up.
 
@@ -133,7 +169,7 @@ Execute the next migration up.
 
         php migrate.php up
 
-## down
+## down [DATABASENAME ...]
 
 Execute the next migration down.
 
