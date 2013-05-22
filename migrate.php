@@ -427,7 +427,7 @@ EOF;
 
     $sql = $migrationInstance->getDownSQL();
     if (!empty($sql)) {
-      if ($this->isCliExecution()) {
+      if ($this->isCliExecution($database)) {
         // cli
         $this->execUsingCli($sql, $database);
 
