@@ -4,17 +4,17 @@ PHPMigrate is a minimum database migration tool for MySQL.
 
 Uses plain SQL to change schema. And runs some PHP codes post and previous executing SQL.
 
-# Requrement
+## Requrement
 
 * PHP5.x or later (Probably).
 
-# Installation
+## Installation
 
 Just puts `migrate.php` file in your direcotry.
 
     wget https://raw.github.com/kohkimakimoto/phpmigrate/master/migrate.php
 
-# Getting Started
+## Getting Started
 
 Configure to connect your MySQL database to migrate.
 
@@ -117,27 +117,27 @@ Also you can run migration `down` command like the following.
 This commad drop your sample table.
 
 
-# Command Usage
+## Command Usage
 
     php migrate.php [-h|-d|-c] COMMAND
 
-# Options
+## Options
 
-## -d
+### -d
 
 Switch the debug mode to output log on the debug level.
 
-## -h
+### -h
 
 List available command line options.
 
-## -c
+### -c
 
 List configurations.
 
-# Commands
+## Commands
 
-## create
+### create
 
 Create new skeleton migration file.
 
@@ -145,7 +145,7 @@ Create new skeleton migration file.
 
         php migrate.php create foo
 
-## status [DATABASENAME ...]
+### status [DATABASENAME ...]
 
 List the migrations yet to be executed.
 
@@ -153,7 +153,7 @@ List the migrations yet to be executed.
 
         php migrate.php status
 
-## migrate [DATABASENAME ...]
+### migrate [DATABASENAME ...]
 
 Execute the next migrations up.
 
@@ -161,7 +161,7 @@ Execute the next migrations up.
 
         php migrate.php migrate
 
-## up [DATABASENAME ...]
+### up [DATABASENAME ...]
 
 Execute the next migration up.
 
@@ -169,7 +169,7 @@ Execute the next migration up.
 
         php migrate.php up
 
-## down [DATABASENAME ...]
+### down [DATABASENAME ...]
 
 Execute the next migration down.
 
@@ -177,11 +177,11 @@ Execute the next migration down.
 
         php migrate.php down
 
-# License
+## License
 
   Apache License 2.0
 
-# Infomation
+## Infomation
 
 My Blog post (written in Japanese)
 
