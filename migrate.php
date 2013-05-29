@@ -785,12 +785,26 @@ EOF;
   protected function getMigrationFileList()
   {
     $files = array();
+    $classes = array();
     $gfiles = glob('*');
     foreach ($gfiles as $file) {
       if (preg_match("/^\d+_.+\.php$/", $file)) {
+        
+        preg_match("/(\d+)_(.*)\.php$/", basename($file), $matches);
+        $version    = $matches[1];
+        $class_name = MigrationUtils::camelize($matches[2]);
+
+        // Check to exist same class name.
+        if (array_key_exists($class_name, $classes)) {
+          // Can't use same class name to migration tasks.
+          throw new Exception("Can't use same class name to migration tasks. Duplicate migration task name [".$classes[$class_name]."] and [".$file."].");
+        }
+
+        $classes[$class_name] = $file;
         $files[] = $file;
       }
     }
+
     sort($files);
     return $files;
   }
