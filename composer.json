@@ -1,0 +1,17 @@
+{
+  "name": "kohkimakimoto/phpmigrate",
+  "description": "PHPMigrate is a minimum database migration tool for MySQL.",
+  "keywords": ["migrations", "db", "database", "mysql"],
+  "homepage": "https://github.com/kohkimakimoto/phpmigrate",
+  "license": "Apache License 2.0",
+  "authors": [
+    {
+      "name": "Kohki Makimoto",
+      "email": "kohki.makimoto@gmail.com",
+      "homepage": "http://kohkimakimoto.hatenablog.com/"
+    }
+  ],
+  "require": {
+    "php": ">=5.3.0"
+  }
+}
