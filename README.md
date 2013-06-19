@@ -4,7 +4,7 @@ PHPMigrate is a minimum database migration tool for MySQL.
 
 Uses plain SQL to change schema. And runs some PHP codes post and previous executing SQL.
 
-**This software was restructured to [MigrationLib](https://github.com/kohkimakimoto/migration-lib) to use easily in other PHP products.**
+**This software was restructured to [LibMigration](https://github.com/kohkimakimoto/lib-migration) to use easily in other PHP products.**
 
 ## Requrement
 
